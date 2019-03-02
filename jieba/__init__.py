@@ -15,16 +15,28 @@ from hashlib import md5
 from ._compat import *
 from . import finalseg
 
+"""
+這個函數的功用是移動（或說重命名）檔案
+這裡使用if-else的寫法是為了處理重命名函數在不同作業系統上的相容性，確保_replace_file在不同的作業系統上皆能運作
+代碼第一行的os.name == 'nt'代表當前的作業系統是Windows
+"""
+
 if os.name == 'nt':
     from shutil import move as _replace_file
 else:
     _replace_file = os.rename
 
+"""
+這個函數的參數path是字典的名稱，它的作用是在字典名稱前加上當前路徑，然後把路徑正規化後回傳
+"""
 _get_abs_path = lambda path: os.path.normpath(os.path.join(os.getcwd(), path))
 
 DEFAULT_DICT = None
 DEFAULT_DICT_NAME = "dict.txt"
 
+"""
+default_logger如字面上的意思，是這個腳本檔中預設的logger
+"""
 log_console = logging.StreamHandler(sys.stderr)
 default_logger = logging.getLogger(__name__)
 default_logger.setLevel(logging.DEBUG)
@@ -34,6 +46,9 @@ DICT_WRITING = {}
 
 pool = None
 
+"""
+這裡定義了數個正則表達式，它們會在分詞及載入字典時發揮作用
+"""
 re_userdict = re.compile('^(.+?)( [0-9]+)?( [a-z]+)?$', re.U)
 
 re_eng = re.compile('[a-zA-Z0-9]', re.U)
@@ -493,7 +508,13 @@ class Tokenizer(object):
             self.dictionary = abs_path
             self.initialized = False
 
-
+"""
+根據jieba文檔裡介紹的使用方法，我們可以直接調用jieba.cut來分詞，這是怎麼做到的呢？
+在定義好Tokenizer類別後，__init__.py裡建立了一個Tokenizer類別的dt對象。
+然後逐一定義全局函數，並將它們指向dt中相對應的函數。
+如：cut = dt.cut這一句，它定義了一個全局函數cut，並把它指向dt對象的cut函數。
+如此一來，我們就可以不用自己新建一個Tokenizer對象，而是直接使用jieba.cut來分詞。
+"""
 # default Tokenizer instance
 
 dt = Tokenizer()
@@ -541,7 +562,9 @@ def _lcut_for_search(s):
 def _lcut_for_search_no_hmm(s):
     return dt._lcut_for_search_no_hmm(s)
 
-
+"""
+以下是並行分詞相關函數
+"""
 def _pcut(sentence, cut_all=False, HMM=True):
     parts = strdecode(sentence).splitlines(True)
     if cut_all:
