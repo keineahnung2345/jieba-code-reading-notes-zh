@@ -68,8 +68,22 @@ def setLogLevel(log_level):
     default_logger.setLevel(log_level)
 
 class Tokenizer(object):
-
+    """
+    在Tokenizer類別中有__init__及initialize這兩個函數，他們發揮的都是初始化的作用。
+    但是__init__函數是比較輕量級的，在該函數中只簡單地定義了幾個屬性。
+    分詞所必需的字典載入則延後至initialize函數中完成。
+    """
     def __init__(self, dictionary=DEFAULT_DICT):
+        """
+        當我們希望某一段代碼能完整地被執行而不被打斷時，我們可以使用threading.Lock來達成。
+        
+        但是initialize裡使用的是threading.RLock而非threading.Lock
+        兩者之間的區別可以參考：class threading.RLock及What is the difference between Lock and RLock
+        在上述連結的例子中，函數a跟函數b都需要lock，並且函數a會呼叫函數b。
+        
+        如果這時候使用threading.Lock將會導致程序卡死，因此我們必須使用threading.RLock。
+        RLock的特性是可以重複地被獲取。
+        """
         self.lock = threading.RLock()
         if dictionary == DEFAULT_DICT:
             self.dictionary = dictionary
@@ -82,34 +96,79 @@ class Tokenizer(object):
         self.tmp_dir = None
         self.cache_file = None
 
+    """
+    這裡覆寫了object類別的__repr__函數。
+    """
     def __repr__(self):
         return '<Tokenizer dictionary=%r>' % self.dictionary
 
+    """
+    從一個己開啟的字典file object中，獲取每個詞的出現頻率以及所有詞的出現次數總和。
+    """
+    # gen_pfdict接受的參數是一個以二進制、讀取模式開啟的檔案。
     def gen_pfdict(self, f):
+        #記錄每個詞的出現次數
         lfreq = {}
+        #所有詞出現次數的總和
         ltotal = 0
+        #他們會在函數的最後被回傳
+
+        #resolve_filename定義於_compat.py
+        #它的作用是獲取一個己開啟的檔案的名字
         f_name = resolve_filename(f)
+        #逐行讀取檔案f的內容
         for lineno, line in enumerate(f, 1):
             try:
+                #因為是以二進制的方式讀檔，
+                # 所以這裡用decode來將它由bytes型別轉成字串型別
                 line = line.strip().decode('utf-8')
+                #更新lfreq及ltotal
                 word, freq = line.split(' ')[:2]
                 freq = int(freq)
                 lfreq[word] = freq
                 ltotal += freq
+
+                #把word的前ch+1個字母當成一個出現次數為0的單詞，加入lfreq這個字典中
+                # 我們待會可以在get_DAG函數裡看到這樣做的用意
+
+                #這裡的xragne在Python3也會被認識，這是因為在_compat.py中定義了xrange
+                #，並將它指向Python3裡的range函數
                 for ch in xrange(len(word)):
                     wfrag = word[:ch + 1]
                     if wfrag not in lfreq:
                         lfreq[wfrag] = 0
+            #在使用.decode('utf-8')的過程中有可能拋出UnicodeDecodeError錯誤。
+            #而我們可以由inspect.getmro(UnicodeDecodeError)這個函數來得知:
+            #ValueError是UnicodeDecodeError的parent class。
+            #所以可以接住UnicodeDecodeError這個異常
             except ValueError:
                 raise ValueError(
                     'invalid dictionary entry in %s at Line %s: %s' % (f_name, lineno, line))
+        #記得參數f是一個己開啟的檔案
+        #這裡將這個檔案給關閉
         f.close()
         return lfreq, ltotal
+    
+    """
+    initialize函數的功能是載入字典，雖然與__init__函數一樣都是用於初始化。
+    但是它不像__init__是在物件創造時就被執行，而是在使用者要存取字典或是開始進行分詞的時候才會執行。
 
+    initialize函數會調用前面介紹的get_dict_file，gen_pfdict，_get_abs_path，DICT_WRITING，default_logger等函數及變數。
+
+    在initialize函數的定義中，使用到了tempfile，marshal套件以及threading中的RLock類別。
+    
+    在initialize結束後，self.FREQ才會被賦予有意義的值，而self.FREQ在分詞的時候會被用到。
+    """
     def initialize(self, dictionary=None):
+        """
+        abs_path代表的是字典的絕對路徑
+        如果使用者傳入了dictionary參數，則需要更新abs_path
+        否則的話，就直接使用在__init__()中己經設好的self.dictionary
+        """
         if dictionary:
             abs_path = _get_abs_path(dictionary)
             if self.dictionary == abs_path and self.initialized:
+                #因為詞典己載入，所以返回
                 return
             else:
                 self.dictionary = abs_path
@@ -117,17 +176,22 @@ class Tokenizer(object):
         else:
             abs_path = self.dictionary
 
+        #載入詞典的過程必須被完整執行，所以使用lock
         with self.lock:
+            #這一段try-except的內容都是pass，似乎沒有作用
             try:
                 with DICT_WRITING[abs_path]:
                     pass
             except KeyError:
                 pass
+            #如果self.intialized為True，代表字典己載入
+	        #這時就直接返回
             if self.initialized:
                 return
 
             default_logger.debug("Building prefix dict from %s ..." % (abs_path or 'the default dictionary'))
             t1 = time.time()
+            #將cache_file設定快取檔案的名稱
             if self.cache_file:
                 cache_file = self.cache_file
             # default dictionary
@@ -137,36 +201,75 @@ class Tokenizer(object):
             else:
                 cache_file = "jieba.u%s.cache" % md5(
                     abs_path.encode('utf-8', 'replace')).hexdigest()
+            """
+            tempfile.gettempdir的作用旨在尋找一個可以寫入暫存檔的目錄。
+            """
+            #將cache_file更新為其絕對路徑
             cache_file = os.path.join(
                 self.tmp_dir or tempfile.gettempdir(), cache_file)
+            #快取檔案的目錄
             # prevent absolute path in self.cache_file
             tmpdir = os.path.dirname(cache_file)
 
             load_from_cache_fail = True
+            """
+            載入cache_file
+            首先檢查cache_file是否存在，並且是一個檔案
+            如果不是的話則略過這部份;
+            如果是的話則接著確認如果使用的是預設的字典DEFAULT_DICT
+            如果不是使用預設的字典，則要確認cache_file的修改時間晚於自訂義字典的修改時間
+            如果都符合條件，則從快取檔案中載入self.FREQ, self.total這兩個值,
+            並將load_from_cache_fail設為False
+            """
             if os.path.isfile(cache_file) and (abs_path == DEFAULT_DICT or
+                #os.path.getmtime: 獲取檔案的最後修改時間
                 os.path.getmtime(cache_file) > os.path.getmtime(abs_path)):
                 default_logger.debug(
                     "Loading model from cache %s" % cache_file)
                 try:
                     with open(cache_file, 'rb') as cf:
+                        """
+                        marshal.dump及marshal.load是用來儲存及載入Python物件的工具。
+                        """
                         self.FREQ, self.total = marshal.load(cf)
                     load_from_cache_fail = False
                 except Exception:
                     load_from_cache_fail = True
 
+            #如果cache_file載入失敗，就重新讀取字典檔案，
+            # 獲取self.FREQ, self.total然後生成快取檔案
             if load_from_cache_fail:
+                #可能是怕程式中斷，所以先把lock存到DICT_WRITING這個字典裡
+                #中斷後繼續執行時就可以不用再重新生成一個lock
                 wlock = DICT_WRITING.get(abs_path, threading.RLock())
                 DICT_WRITING[abs_path] = wlock
+                #在這個程式區塊中，又需要一個lock，用來鎖住寫檔的這一區塊
                 with wlock:
                     self.FREQ, self.total = self.gen_pfdict(self.get_dict_file())
                     default_logger.debug(
                         "Dumping model to file cache %s" % cache_file)
                     try:
                         # prevent moving across different filesystems
+                        """
+                        tempfile.mkstemp的作用旨在使用最安全的方式創建一個暫存檔。
+                        它回傳的是一個file descriptor，以及該檔案的絕對路徑。
+                        """
+                        # tmpdir是剛剛決定好的快取檔案的路徑
+                        # prevent moving across different filesystems
                         fd, fpath = tempfile.mkstemp(dir=tmpdir)
+                        """
+                        os.fdopen:
+                        利用傳入的file descriptor fd，回傳一個開啟的檔案物件。
+                        """
+                        # 使用marshal.dump將剛拿到的
+                        # (self.FREQ, self.total)倒入temp_cache_file
                         with os.fdopen(fd, 'wb') as temp_cache_file:
+                            """
+                            marshal.dump及marshal.load是用來儲存及載入Python物件的工具。
+                            """
                             marshal.dump(
                                 (self.FREQ, self.total), temp_cache_file)
+                        #把檔案重命名為cache_file
                         _replace_file(fpath, cache_file)
                     except Exception:
                         default_logger.exception("Dump cache file failed.")
@@ -176,15 +279,24 @@ class Tokenizer(object):
                 except KeyError:
                     pass
 
+            #之後會利用self.initialized這個屬性
+            # 來檢查self.FREQ, self.total是否己被設為有意義的值
             self.initialized = True
             default_logger.debug(
                 "Loading model cost %.3f seconds." % (time.time() - t1))
             default_logger.debug("Prefix dict has been built successfully.")
 
+    """
+    檢查self.FREQ及self.total是否己被設為有意義的值。
+    如果還沒，則調用initialize函數從字典導入。
+    """
     def check_initialized(self):
         if not self.initialized:
             self.initialize()
 
+    """
+    分詞核心函數
+    """
     def calc(self, sentence, DAG, route):
         N = len(sentence)
         route[N] = (0, 0)
@@ -347,6 +459,11 @@ class Tokenizer(object):
                         yield gram3
             yield w
 
+    """
+    分詞函數wrapper
+    原有的分詞函數回傳的是generator型別的變數。
+    下面以l開頭的函數們調用了原有的分詞函數，將它們的回傳值轉為list型別，提升了其易用性。
+    """
     def lcut(self, *args, **kwargs):
         return list(self.cut(*args, **kwargs))
 
@@ -365,12 +482,20 @@ class Tokenizer(object):
     def _lcut_for_search_no_hmm(self, sentence):
         return self.lcut_for_search(sentence, False)
 
+    """
+    這個函數的作用是讀取字典檔案，開啟後回傳。
+    它預設讀取dict.txt，但使用者也可以自定義字典。
+    """
     def get_dict_file(self):
         if self.dictionary == DEFAULT_DICT:
             return get_module_res(DEFAULT_DICT_NAME)
         else:
             return open(self.dictionary, 'rb')
 
+    """
+    自定義詞典
+    jieba支持自定義詞典，因為這不是核心功能，在此僅列出相關函數，並不多做介紹。
+    """
     def load_userdict(self, f):
         '''
         Load personalized dict to improve detect rate.
@@ -467,6 +592,10 @@ class Tokenizer(object):
             add_word(word, freq)
         return freq
 
+    """
+    tokenize函數
+    將cut函數回傳的字串包裝成(字串起始位置，字串終止位置，字串)的三元組後回傳。
+    """
     def tokenize(self, unicode_sentence, mode="default", HMM=True):
         """
         Tokenize a sentence and yields tuples of (word, start, end)
