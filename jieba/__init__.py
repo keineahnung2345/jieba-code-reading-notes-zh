@@ -322,11 +322,56 @@ class Tokenizer(object):
     """
     分詞核心函數
     """
+
+    """
+    calc函數接受sentence,DAG及route三個參數。
+    其中sentece是要分詞的句子，DAG是由get_DAG函數得到的有向無環圖。
+    route在被傳入時是一個空的字典。
+    在calc這個函數中會利用sentence及DAG來填充route，在函數結束後，route記錄的是句中每個詞的範圍，以及他們的機率對數。
+    """
     def calc(self, sentence, DAG, route):
         N = len(sentence)
         route[N] = (0, 0)
+        #self.total在gen_pfdict中計算，代表的是字典中所有詞出現次數的總和
         logtotal = log(self.total)
+
+        """
+        由後往前建構route
+        我們會使用動態規劃的方式，由後往前填充route，依序找出由sentence[idx]到句尾的最大切分組合的機率對數。。
+        為什麼要由後往前填充呢?我們可以從代碼中看到，在計算route[idx]時會利用到route[x+1](x大於等於idx)的值。
+        因為在計算前面的內容時會用到後面的內容，使用這種順序來填充，就能讓我們在一次循環裡完成整個過程。
+        """
         for idx in xrange(N - 1, -1, -1):
+            """
+            route[idx]是一個tuple。
+            tuple裡第一個元素代表的是sentence[i:]（從當前字元到句子末尾的字段）最有可能出現的切分方式的機率對數。
+            第二個元素則是在該切分方式中，包含sentence[i]的詞的詞尾索引。
+            """
+	
+            """
+            for x in DAG[idx]：
+            DAG這個字典記錄的是sentence中可以成詞的範圍。
+            它的鍵代表詞首索引，值則代表以該鍵為詞首的所有詞的詞尾索引。
+            在上面的代碼塊中，idx就是詞首索引，DAG[idx]是所有以sentence[idx]為詞首的詞的詞尾索引。x則是DAG[idx]中的單個元素。
+	    所以sentence[idx:x + 1]就表示DAG裡存的詞。
+            """
+		
+            """
+            self.FREQ.get(sentence[idx:x + 1]) or 1：
+            表示如果sentence[idx:x + 1]這個字段不存在FREQ中，或者它的詞頻為0，則以1取代，這樣在經過log後的結果便是0。
+            """
+	
+            """
+            log(self.FREQ.get(sentence[idx:x + 1]) or 1) - logtotal + route[x + 1][0]：
+            第一項是句中第idx個字到第x個字的詞頻對數。
+            將第一項與第二項相加，相當於把第一項正規化，得到的是機率對數。
+            第三項是句中第x+1個字到句尾最大切分組合的機率對數。
+            所以三項總和就是"如果新增x為切分點，這種組合的機率對數"。
+            """
+		
+            """
+            max會找出sentence[idx:]的最大切分組合的機率對數以及對應的切分點。這也是route[idx]被賦予的值。
+            """
             route[idx] = max((log(self.FREQ.get(sentence[idx:x + 1]) or 1) -
                               logtotal + route[x + 1][0], x) for x in DAG[idx])
 
@@ -410,25 +455,40 @@ class Tokenizer(object):
                         #更新詞尾
                         old_j = j
 
+    """
+    利用calc函數算出route，因為英數字並不存在字典中，所以route裡的英數字會被切成一個一個的字元。
+    在__cut_DAG_NO_HMM中，會由前往後掃描route裡的內容。使用re_eng來找出句中的英數字，如果碰到了，就把它們放到buf裡，碰到下個中文字時再輸出。
+    """
     def __cut_DAG_NO_HMM(self, sentence):
         DAG = self.get_DAG(sentence)
         route = {}
+        #注意因為字典裡沒有記錄英數字的詞頻，所以會把它們切成一個一個的字元
         self.calc(sentence, DAG, route)
         x = 0
         N = len(sentence)
+        #用來暫存英數字
         buf = ''
+        # 由前往後
         while x < N:
+            #route[x][1]表示的是"以sentence[x]開頭，擁有最大概率的詞的詞尾的索引"
             y = route[x][1] + 1
+            #sentence[x:y]:從句子中擷取出該詞
             l_word = sentence[x:y]
+            #如果是英數字且長度為1
             if re_eng.match(l_word) and len(l_word) == 1:
                 buf += l_word
+                #接下來從y（當前詞的下一個字元）開始搜尋
                 x = y
             else:
+                # 之前收集的字元被集中到buf裡，這裡輸出並清出buf
                 if buf:
                     yield buf
                     buf = ''
+                # 把buf清空後（如果有的話），才輸山l_word
                 yield l_word
+                #接下來從y（當前詞的下一個字元）開始搜尋
                 x = y
+        # 最後一次的清空
         if buf:
             yield buf
             buf = ''
