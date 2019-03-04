@@ -620,23 +620,30 @@ class Tokenizer(object):
                         # 對全模式來說，就只是以re_skip來切割blk
                         yield x
 			
-
+    """
+    搜索引擎模式是基於精確模式，從下面的代碼中可以看到，在cut_for_search函數中會調用cut這個函數。
+    """
     def cut_for_search(self, sentence, HMM=True):
         """
         Finer segmentation for search engines.
         """
+        # cut函數中cut_all參數默認為False，所以使用的是精確模式
         words = self.cut(sentence, HMM=HMM)
         for w in words:
             if len(w) > 2:
+                #尋找詞彙w中是否包含二字詞
                 for i in xrange(len(w) - 1):
                     gram2 = w[i:i + 2]
                     if self.FREQ.get(gram2):
+                        #如果有包含二字詞則輸出
                         yield gram2
             if len(w) > 3:
+                #尋找詞彙w中是否包含三字詞
                 for i in xrange(len(w) - 2):
                     gram3 = w[i:i + 3]
                     if self.FREQ.get(gram3):
                         yield gram3
+            #除了詞彙w中所包含的二字詞及三字詞，也輸出w本身
             yield w
 
     """
