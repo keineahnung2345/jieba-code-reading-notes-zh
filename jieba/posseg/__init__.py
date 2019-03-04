@@ -12,14 +12,21 @@ PROB_TRANS_P = "prob_trans.p"
 PROB_EMIT_P = "prob_emit.p"
 CHAR_STATE_TAB_P = "char_state_tab.p"
 
+#一個或多個漢字
 re_han_detail = re.compile("([\u4E00-\u9FD5]+)")
+#一個或多個 (.跟0-9)或英數字
 re_skip_detail = re.compile("([\.0-9]+|[a-zA-Z0-9]+)")
+#一個或多個漢字或英數字或+#&._
 re_han_internal = re.compile("([\u4E00-\u9FD5a-zA-Z0-9+#&\._]+)")
+#\s等於[ \t\n\r\f\v]:https://docs.python.org/3/library/re.html#re.compile
 re_skip_internal = re.compile("(\r\n|\s)")
 
+#一個或多個英數字
 re_eng = re.compile("[a-zA-Z0-9]+")
+#一個或多個小數點或數字 
 re_num = re.compile("[\.0-9]+")
 
+#長度為1的英數字
 re_eng1 = re.compile('^[a-zA-Z0-9]$', re.U)
 
 
