@@ -74,7 +74,17 @@ def __cut(sentence):
     if nexti < len(sentence):
         yield sentence[nexti:]
 
+"""
+一個或多個漢字
+"""
 re_han = re.compile("([\u4E00-\u9FD5]+)")
+"""
+[a-zA-Z0-9]+ : 一個或多個英數字
+\.\d+ : ".加上一個或多個數字"
+(?:) : ()會創造一個捕獲性分組，而在組內加上?:則會讓該分組無法捕獲。
+(?:\.\d+)? : 配對該group零次或一次
+%? : 配對%零次或一次
+"""
 re_skip = re.compile("([a-zA-Z0-9]+(?:\.\d+)?%?)")
 
 
