@@ -49,10 +49,32 @@ pool = None
 """
 這裡定義了數個正則表達式，它們會在分詞及載入字典時發揮作用
 """
+"""
+re_userdict:
+錨點 ^ 和 $ :^表示匹配字串的開頭，$表示匹配字串的結尾
+分組和捕獲():()會創造一個捕獲性分組，之後可以用re_userdict.match(line).groups()來得到己匹配的分組
+lazy匹配，.+?：.+會貪心地(盡可能多地)匹配，加上?之後變成lazy匹配。如果實際去測試移除?之後的效果，會發現字串全部被分到第一個組別。
+或運算符[]：如[0-9]匹配0到9中的其中一個字
+數量符?:匹配零次或一次?前面的東西
+re.compile會將pattern編譯成正則表達式物件。我們之後就可以用它來match或search其它串。
+re.U會根據Unicode字集來解釋字元。
+
+re_userdict會匹配一個字串，並將它分成三組。
+第一組是配對一至多個任意字元，直到空白出現為止。
+第二組是配對空白加上一至多個數字。
+第三組是配對空白加上一至多個英文字母。
+"""
 re_userdict = re.compile('^(.+?)( [0-9]+)?( [a-z]+)?$', re.U)
 
+"""
+re_eng對應到單個英文或數字。
+"""
 re_eng = re.compile('[a-zA-Z0-9]', re.U)
 
+"""
+\u4E00表示的是'一'這個字，\u9FD5表示的是'鿕'，[\u4E00-\u9FD5]表示所有漢字
+re_han_default的作用是與一個或多個漢字，英數字，+#&._%-等字元配對。
+"""
 # \u4E00-\u9FD5a-zA-Z0-9+#&\._ : All non-space characters. Will be handled with re_han
 # \r\n|\s : whitespace characters. Will not be handled.
 # re_han_default = re.compile("([\u4E00-\u9FD5a-zA-Z0-9+#&\._%]+)", re.U)
@@ -60,6 +82,9 @@ re_eng = re.compile('[a-zA-Z0-9]', re.U)
 re_han_default = re.compile("([\u4E00-\u9FD5a-zA-Z0-9+#&\._%\-]+)", re.U)
 
 re_skip_default = re.compile("(\r\n|\s)", re.U)
+"""
+re_han_cut_all的作用是與一個或多個漢字配對。
+"""
 re_han_cut_all = re.compile("([\u4E00-\u9FD5]+)", re.U)
 re_skip_cut_all = re.compile("[^a-zA-Z0-9+#\n]", re.U)
 
