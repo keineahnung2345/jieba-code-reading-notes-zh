@@ -548,6 +548,10 @@ class Tokenizer(object):
                 for elem in buf:
                     yield elem
 
+    """
+    cut並不包含核心算法，它只是多種不同分詞函數（如：__cut_all，__cut_DAG_NO_HMM，__cut_DAG）的入口。
+    至於具體使用哪一種分詞函數，則是透過傳入的參數cut_all，HMM來決定。
+    """
     def cut(self, sentence, cut_all=False, HMM=True):
         '''
         The main function that segments an entire sentence that contains
@@ -558,37 +562,64 @@ class Tokenizer(object):
             - cut_all: Model type. True for full pattern, False for accurate pattern.
             - HMM: Whether to use the Hidden Markov Model.
         '''
+        # 在Python3中，是將sentence轉為str型別
         sentence = strdecode(sentence)
 
         if cut_all:
+            #用於全模式，只包含漢字
             re_han = re_han_cut_all
+            #用於全模式，配對非英數字及非+#\n者
             re_skip = re_skip_cut_all
         else:
+            #用於精確模式，包含漢字、英數字及+#&._%-
             re_han = re_han_default
+            #用於精確模式，包含換行及空白符
             re_skip = re_skip_default
         if cut_all:
+            # 全模式
+            # __cut_all函數只適用於全是漢字的句子
             cut_block = self.__cut_all
         elif HMM:
+            # 精確模式，使用HMM維特比算法發現新詞
+            # __cut_DAG可以處理句中有英數字的情況
             cut_block = self.__cut_DAG
         else:
+            # 精確模式，使用DAG及動態規劃算法
+            # __cut_DAG_NO_HMM可以處理句中有英數字的情況
             cut_block = self.__cut_DAG_NO_HMM
+        """
+        re_han的用意是將cut_block可處理與不可處理的字段分開
+        對全模式來說，cut_block可處理的只有漢字
+        對精確模式來說，cut_block可處理漢字，英數字及其它符號
+        """
+        # 先用空白字元把句子切分成好幾個blocks
         blocks = re_han.split(sentence)
         for blk in blocks:
+            #略過空字串
             if not blk:
                 continue
             if re_han.match(blk):
+            # 能跟re_han match就代表可被cut_block所處理
                 for word in cut_block(blk):
                     yield word
             else:
+                # 無法被cut_block處理的
                 tmp = re_skip.split(blk)
                 for x in tmp:
                     if re_skip.match(x):
                         yield x
+                    #elif只用於精確模式
                     elif not cut_all:
+                        # 在精確模式下，re_split是換行符及空白符
+                        # 如果x進入elif這個區塊，代表它不是換行符及空白符
+                        # 另外x也不是精確模式下的cut_block可以處理的(即x不是英數字)
+                        # 在這種情況下，會把x一個字一個字地切開
                         for xx in x:
                             yield xx
                     else:
+                        # 對全模式來說，就只是以re_skip來切割blk
                         yield x
+			
 
     def cut_for_search(self, sentence, HMM=True):
         """
@@ -754,23 +785,27 @@ class Tokenizer(object):
             - mode: "default" or "search", "search" is for finer segmentation.
             - HMM: whether to use the Hidden Markov Model.
         """
+        # 在Python3下，text_type是str
         if not isinstance(unicode_sentence, text_type):
             raise ValueError("jieba: the input parameter should be unicode.")
         start = 0
         if mode == 'default':
             for w in self.cut(unicode_sentence, HMM=HMM):
                 width = len(w)
+                # 把切好的字段打包成三元組
                 yield (w, start, start + width)
                 start += width
         else:
             for w in self.cut(unicode_sentence, HMM=HMM):
                 width = len(w)
                 if len(w) > 2:
+                    # 檢查w中是否包含有二字詞
                     for i in xrange(len(w) - 1):
                         gram2 = w[i:i + 2]
                         if self.FREQ.get(gram2):
                             yield (gram2, start + i, start + i + 2)
                 if len(w) > 3:
+                    # 檢查w中是否包含有三字詞
                     for i in xrange(len(w) - 2):
                         gram3 = w[i:i + 3]
                         if self.FREQ.get(gram3):
