@@ -330,35 +330,84 @@ class Tokenizer(object):
             route[idx] = max((log(self.FREQ.get(sentence[idx:x + 1]) or 1) -
                               logtotal + route[x + 1][0], x) for x in DAG[idx])
 
+    """
+    get_DAG這個函數的目的就是利用手上有的字典(self.FREQ)，將句子表示成一個有向無環圖(DAG)。
+    在以下代碼中，DAG是一個把詞首索引對應到一個list的字典。list裡的每個元素是所有可以與該詞首成詞的詞尾索引。
+    
+    要注意的是get_DAG函數會將非漢字的字元都切成單字詞。
+    因此在__cut_DAG_NO_HMM中，會需要re_eng來對get_DAG的結果進行後處理。
+    """
     def get_DAG(self, sentence):
+        #這段代碼裡會用到self.FREQ，所以需要確保對象己經初始化
         self.check_initialized()
         DAG = {}
         N = len(sentence)
+        #如果是使用Python3
+        #這裡的xrange將指向range(這是在_compat.py裡做的)
         for k in xrange(N):
+            #用來儲存詞尾的索引
             tmplist = []
+            #當前cursor的位置，用來找出詞尾
             i = k
+            #當前的字段，表示句子的第k個字到第i個字
             frag = sentence[k]
+            #在gen_pfdict中為self.FREQ賦予了值(可以參考https://blog.csdn.net/keineahnung2345/article/details/86977785#gen_pfdict_133)
+            #self.FREQ中包含的是存在字典裡的詞，他們的詞頻由字典給出，
+            #另外對於self.FREQ中的所有詞，它還把這些詞的前n個字都加入self.FREQ，並將它們的詞頻設為0
             while i < N and frag in self.FREQ:
+                #因為只有當句子的片段frag在self.FREQ裡面時，才會繼續尋找
+                #為了避免還沒看到詞尾就跳出迴圈，
+                #所以在gen_pfdict裡才會將詞的前n個字都加入self.FREQ的原因
+            
+                #這裡檢查sentence裡的第k到第i個字(即frag)是否成詞（也就是檢查frag這個片段的詞頻是否大於0）
                 if self.FREQ[frag]:
+                    #如果frag成詞的話，就把i加入tmplist裡，表示句中的第k個字到第i個字可以成詞
+                    #實際上的字段frag是sentence[k:i+1]
                     tmplist.append(i)
+                #繼續看下一個字
                 i += 1
                 frag = sentence[k:i + 1]
+            #如果沒有字可與sentence[k]成詞
             if not tmplist:
+                #單字成詞
                 tmplist.append(k)
+            #DAG記錄的是sentence裡的第k個字可以跟句字裡的哪些字組成詞
             DAG[k] = tmplist
         return DAG
 
+    """
+    __cut_all函數會利用get_DAG函數建立的dag來找出句中所有可以成詞的部份。
+    注意到以下分詞函數是在句中的某個字無法與其它字成詞時，才會輸出該單字詞。
+    
+    要注意的是__cut_all函數並未對非漢字的字元做處理。
+    因此在cut及tokenizer函數中才需要一個re_han來過濾出__cut_all能處理的詞。
+    """
     def __cut_all(self, sentence):
+        #dag表示句中的第幾個字到第幾個字可以成詞
         dag = self.get_DAG(sentence)
+        #前一個詞的詞尾，初始值為0-1=-1
         old_j = -1
+
+        #dag是一個字典，鍵代表詞首索引，值則是一個list，裡面的每個元素代表能與鍵成詞的詞尾索引
+        #用在這裡的話，便是：從第k個字開始，到L中的第j個字都可以成詞
+
+        # iteritems定義於_compat.py
         for k, L in iteritems(dag):
+            #從get_DAG裡可以知道，當L的長度為1時，表示第k個字單字成詞
+            #單字成詞在一般情況下不輸出
+            #只有當第k個字無法與之前的字組詞(不被前面的字所組的詞所包含)時才會輸出
             if len(L) == 1 and k > old_j:
+                #這時的L[0]+1其實就是k+1
                 yield sentence[k:L[0] + 1]
+                #詞尾設為k
                 old_j = L[0]
             else:
                 for j in L:
+                    #如果有多字的詞，就略過單個字的詞
+                    #(詞尾j=詞首k表示一個單字詞)
                     if j > k:
                         yield sentence[k:j + 1]
+                        #更新詞尾
                         old_j = j
 
     def __cut_DAG_NO_HMM(self, sentence):
