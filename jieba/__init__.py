@@ -493,6 +493,10 @@ class Tokenizer(object):
             yield buf
             buf = ''
 
+    """
+    finalseg.cut函數不查找字典，而是只依靠HMM維特比算法來分詞。
+    __cut_DAG函數則是在finalseg.cut外又包了一層，以查字典為主，維特比分詞為輔。
+    """
     def __cut_DAG(self, sentence):
         DAG = self.get_DAG(sentence)
         route = {}
@@ -503,22 +507,33 @@ class Tokenizer(object):
         while x < N:
             y = route[x][1] + 1
             l_word = sentence[x:y]
+            # l_word長度為1，包括英文、數字及單字詞
             if y - x == 1:
+                #如果碰到單字詞，就把它與前一個詞合併
                 buf += l_word
             else:
+            #看到一個長度大於等於2的詞
+                #如果這時buf裡有東西，就先處理它
                 if buf:
                     if len(buf) == 1:
                         yield buf
                         buf = ''
                     else:
+                    #多字的buf
+                        #如果buf不存在於FREQ這個字典中
                         if not self.FREQ.get(buf):
+                            #那就使用維特比算法發現新詞
                             recognized = finalseg.cut(buf)
                             for t in recognized:
                                 yield t
                         else:
+                        #buf存在於FREQ這個字典中
+                            #buf裡的東西是沒有被DAG給當成一個詞彙的
+                            # 有可能出現DAG偵測不出來，FREQ裡卻存在的情況?
                             for elem in buf:
                                 yield elem
                         buf = ''
+                #buf處理完後yield當前詞:l_word
                 yield l_word
             x = y
 
