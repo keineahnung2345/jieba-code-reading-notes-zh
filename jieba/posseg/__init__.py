@@ -176,8 +176,16 @@ class POSTokenizer(object):
                             yield pair(x, 'eng')
                         else:
                             yield pair(x, 'x')
-
+    """
+    此處代碼與jieba/__init__.py裡的__cut_DAG_NO_HMM雷同
+    可以參考https://blog.csdn.net/keineahnung2345/article/details/86735757
+    不同之處僅在於：
+    self.get_DAG及self.calc變成self.tokenizer.get_DAG及self.tokenizer.calc
+    if re_eng.match(l_word) and len(l_word) == 1:被改成了if re_eng1.match(l_word)
+    yield的東西由一個詞彙變成一個pair
+    """
     def __cut_DAG_NO_HMM(self, sentence):
+        #__cut_DAG_NO_HMM是以匹配正則表達式re_eng1及查找字典self.word_tag_tab並用的方式來標注詞性。
         DAG = self.tokenizer.get_DAG(sentence)
         route = {}
         self.tokenizer.calc(sentence, DAG, route)
@@ -187,16 +195,22 @@ class POSTokenizer(object):
         while x < N:
             y = route[x][1] + 1
             l_word = sentence[x:y]
+            #re_eng1:長度為1的英數字
             if re_eng1.match(l_word):
                 buf += l_word
                 x = y
             else:
                 if buf:
+                    #buf裡只有與re_eng1配對的字
+                    #所以這裡可以將它的詞性設為英文
                     yield pair(buf, 'eng')
                     buf = ''
+                #如果字典裡沒有l_word，就把它的詞性當成'x'(未知)
                 yield pair(l_word, self.word_tag_tab.get(l_word, 'x'))
                 x = y
         if buf:
+            #buf裡只有與re_eng1配對的字
+            #所以這裡可以將它的詞性設為英文
             yield pair(buf, 'eng')
             buf = ''
 
