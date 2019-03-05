@@ -298,25 +298,37 @@ class POSTokenizer(object):
                 for elem in buf:
                     yield pair(elem, self.word_tag_tab.get(elem, 'x'))
 
+    """
+    在以下代碼中，先依HMM這個參數來決定要使用__cut_DAG或__cut_DAG_NO_HMM，然後改以cut_blk來稱呼它。
+    一開始用re_han_internal來將句子分割成可處理的及不可處理的部份。可處理的部份直接呼叫cut_blk，不可處理的部份則利用正則表達式匹配的方式來做詞性標注。
+    """
     def __cut_internal(self, sentence, HMM=True):
         self.makesure_userdict_loaded()
         sentence = strdecode(sentence)
+        #re_han_internal:一個或多個中文或英數字或+#&._
+        #能與re_han_internal匹配代表可以被__cut_DAG或__cut_DAG_NO_HMM處理
         blocks = re_han_internal.split(sentence)
+        #決定要使用__cut_DAG或__cut_DAG_NO_HMM中的一個
         if HMM:
             cut_blk = self.__cut_DAG
         else:
             cut_blk = self.__cut_DAG_NO_HMM
 
         for blk in blocks:
+            #如果與re_han_internal相匹配，代表可被__cut_DAG及__cut_DAG_NO_HMM所處理
             if re_han_internal.match(blk):
                 for word in cut_blk(blk):
                     yield word
             else:
+                #無法與re_han_internal匹配的blk
+                #re_skip_internal:換行字元及空白字元
                 tmp = re_skip_internal.split(blk)
                 for x in tmp:
                     if re_skip_internal.match(x):
+                        #換行字元及空白字元的詞性為'x'(未知)
                         yield pair(x, 'x')
                     else:
+                        #非空白字元，檢查它是否為數字或英文
                         for xx in x:
                             if re_num.match(xx):
                                 yield pair(xx, 'm')
@@ -325,16 +337,30 @@ class POSTokenizer(object):
                             else:
                                 yield pair(xx, 'x')
 
+    """
+    __cut_internal(sentence)的wrapper，將其輸出由generator型別轉為list型別。
+    """
     def _lcut_internal(self, sentence):
         return list(self.__cut_internal(sentence))
-
+    
+    """
+    __cut_internal(sentence, False)的wrapper，將其輸出由generator型別轉為list型別。
+    """
     def _lcut_internal_no_hmm(self, sentence):
         return list(self.__cut_internal(sentence, False))
 
+    """
+    POSTokenizer的cut函數是__cut_internal函數的wrapper，
+    接受的參數與__cut_internal一樣是sentence跟HMM。
+    它會依據HMM來決定要調用__cut_DAG_NO_HMM，__cut_DAG中的一個。
+    """
     def cut(self, sentence, HMM=True):
         for w in self.__cut_internal(sentence, HMM=HMM):
             yield w
 
+    """
+    cut的wrapper，將其輸出由generator型別轉為list型別。
+    """
     def lcut(self, *args, **kwargs):
         return list(self.cut(*args, **kwargs))
 
