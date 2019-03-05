@@ -148,39 +148,65 @@ class POSTokenizer(object):
             self.word_tag_tab.update(self.tokenizer.user_word_tag_tab)
             self.tokenizer.user_word_tag_tab = {}
 
+    """
+    __cut會先呼叫viterbi這個函數，得到句中各字的分詞標籤及詞性。
+    然後再將得到的結果打包成一對一對的(詞彙，詞性)pair。
+    __cut是一個生成器，每次被呼叫時，就生成一對(詞彙，詞性)pair。
+    注意__cut並未對英數字做特別處理，所以它跟viterbi函數一樣，只能處理sentence全是漢字的情況。
+    """
     def __cut(self, sentence):
+        #使用維特比算法找出最有可能的狀態序列pos_list及其機率prob
+        #所謂狀態包含分詞標籤及詞性
         prob, pos_list = viterbi(
             sentence, char_state_tab_P, start_P, trans_P, emit_P)
         begin, nexti = 0, 0
 
         for i, char in enumerate(sentence):
+            #[0]表示分詞標籤('B'，'M'，'E'，'S')
             pos = pos_list[i][0]
             if pos == 'B':
                 begin = i
             elif pos == 'E':
+                #到詞尾時yield出該詞彙
+                #pos_list[i][1]表示該詞的詞性，這裡以詞尾的詞性代表全詞的詞性
                 yield pair(sentence[begin:i + 1], pos_list[i][1])
                 nexti = i + 1
             elif pos == 'S':
+                #單字成詞的情況下直接yield
                 yield pair(char, pos_list[i][1])
                 nexti = i + 1
+        #nexti記錄上個詞彙詞尾的後一個位置
         if nexti < len(sentence):
             yield pair(sentence[nexti:], pos_list[nexti][1])
 
+    """
+    __cut_detail是__cut的wrapper，它與__cut同樣是一個會生成(詞彙，詞性)pair的生成器。
+    但是它有對英數字做處理，並賦予它們詞性，所以它可以處理句中包含英數字的情況。
+    """
     def __cut_detail(self, sentence):
+        #re_han_detail:一個或多個漢字
         blocks = re_han_detail.split(sentence)
         for blk in blocks:
             if re_han_detail.match(blk):
+                #如果該區段包含漢字，則直接使用__cut來切
                 for word in self.__cut(blk):
                     yield word
             else:
+                #非漢字的區段
+                #re_num:小數點及數字
+                #re_eng:英數字
+                #re_skip_detail:re_num或re_eng
                 tmp = re_skip_detail.split(blk)
                 for x in tmp:
                     if x:
                         if re_num.match(x):
+                            #'m':數詞
                             yield pair(x, 'm')
                         elif re_eng.match(x):
+                            #'eng':外語
                             yield pair(x, 'eng')
                         else:
+                            #'x':非語素字
                             yield pair(x, 'x')
     """
     此處代碼與jieba/__init__.py裡的__cut_DAG_NO_HMM雷同
@@ -220,6 +246,12 @@ class POSTokenizer(object):
             yield pair(buf, 'eng')
             buf = ''
 
+    """
+    此處的代碼邏輯與jieba/__init__.py裡的__cut_DAG函數類似。
+    它會呼叫__cut_detail，而__cut_detail又會呼叫__cut。
+    __cut_DAG這個函數是以查找字典為主，維特比算法(即呼叫__cut_detail)為輔的方式來找出詞首詞尾。
+    它與之前的__cut_detail還有__cut一樣，都是生成器，每次生成一對(詞彙，詞性)pair。
+    """
     def __cut_DAG(self, sentence):
         DAG = self.tokenizer.get_DAG(sentence)
         route = {}
@@ -235,20 +267,26 @@ class POSTokenizer(object):
             if y - x == 1:
                 buf += l_word
             else:
+                #碰到多字詞，先處理之前的buf
                 if buf:
                     if len(buf) == 1:
+                        #單字詞
                         yield pair(buf, self.word_tag_tab.get(buf, 'x'))
                     elif not self.tokenizer.FREQ.get(buf):
+                        #如果是未記錄於FREQ裡的buf，就使用維特比算法來找出詞首詞尾
                         recognized = self.__cut_detail(buf)
                         for t in recognized:
                             yield t
                     else:
+                        #如果buf存在於FREQ裡，則把它拆成多個單字詞?
                         for elem in buf:
                             yield pair(elem, self.word_tag_tab.get(elem, 'x'))
                     buf = ''
+                #處理當前的多字詞
                 yield pair(l_word, self.word_tag_tab.get(l_word, 'x'))
             x = y
 
+        #用一樣的方式來處理殘留的buf
         if buf:
             if len(buf) == 1:
                 yield pair(buf, self.word_tag_tab.get(buf, 'x'))
