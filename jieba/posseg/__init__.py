@@ -47,7 +47,10 @@ else:
     from .prob_trans import P as trans_P
     from .prob_emit import P as emit_P
 
-
+"""
+pair類別具有兩個屬性，分別是word及flag，它們代表詞彙本身及其詞性。
+在POSTokenizer中的__cut_DAG_NO_HMM及__cut_DAG函數中，將會把分詞結果及詞性標注結果打包成pair類別的物件後回傳。
+"""
 class pair(object):
 
     def __init__(self, word, flag):
@@ -81,7 +84,9 @@ class pair(object):
     def encode(self, arg):
         return self.__unicode__().encode(arg)
 
-
+"""
+POSTokenizer類別中定義了__cut_DAG_NO_HMM及__cut_DAG函數，它們負責了詞性標注的核心算法。
+"""
 class POSTokenizer(object):
 
     def __init__(self, tokenizer=None):
@@ -259,6 +264,9 @@ class POSTokenizer(object):
     def lcut(self, *args, **kwargs):
         return list(self.cut(*args, **kwargs))
 
+"""
+此處基於上述定義的POSTokenizer及pair類別，定義了幾個全局的變數及函數。
+"""
 # default Tokenizer instance
 
 dt = POSTokenizer(jieba.dt)
