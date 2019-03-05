@@ -90,7 +90,10 @@ POSTokenizer類別中定義了__cut_DAG_NO_HMM及__cut_DAG函數，它們負責�
 class POSTokenizer(object):
 
     def __init__(self, tokenizer=None):
+        # 它需要借用jieba.Tokenizer的get_dict_file, get_DAG, calc等函數
+        # 所以這裡才會定義了tokenizer這個屬性
         self.tokenizer = tokenizer or jieba.Tokenizer()
+        # 這一句怎麼同時出現在__init__()及initialize()?
         self.load_word_tag(self.tokenizer.get_dict_file())
 
     def __repr__(self):
@@ -100,13 +103,20 @@ class POSTokenizer(object):
         if name in ('cut_for_search', 'lcut_for_search', 'tokenize'):
             # may be possible?
             raise NotImplementedError
+        # POSTokenizer並未實作cut_for_search, lcut_for_search, tokenize
+        # 其餘的功能如cut, lcut等有被POSTokenizer覆寫，所以可以使用
         return getattr(self.tokenizer, name)
 
     def initialize(self, dictionary=None):
         self.tokenizer.initialize(dictionary)
+        # 這一句怎麼同時出現在__init__()及initialize()?
         self.load_word_tag(self.tokenizer.get_dict_file())
 
     def load_word_tag(self, f):
+        #這個函數接受一個開啟的file object當作輸入，然後將它的內容讀到一個dict內
+        #即，從jieba/dict.txt中載入word_tag_tab
+        
+        #一個把詞彙對應到詞性的字典
         self.word_tag_tab = {}
         f_name = resolve_filename(f)
         for lineno, line in enumerate(f, 1):
@@ -122,7 +132,13 @@ class POSTokenizer(object):
         f.close()
 
     def makesure_userdict_loaded(self):
+        #如果使用者有自定義詞彙，那麼makesure_userdict_loaded函數會將它們加入word_tag_tab。
+        
+        #在使用者有用add_word增加新詞時self.tokenizer.user_word_tag_tab才會不為空
         if self.tokenizer.user_word_tag_tab:
+            #參考https://www.programiz.com/python-programming/methods/dictionary/update
+            #字典1.update(字典2):如果字典2的key不在字典1中,則把該key加入字典1;
+            #如果字典2的key己經存在字典1中,則更新字典1中該key的值
             self.word_tag_tab.update(self.tokenizer.user_word_tag_tab)
             self.tokenizer.user_word_tag_tab = {}
 
