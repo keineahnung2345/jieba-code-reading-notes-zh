@@ -29,7 +29,13 @@ re_num = re.compile("[\.0-9]+")
 #長度為1的英數字
 re_eng1 = re.compile('^[a-zA-Z0-9]$', re.U)
 
+"""
+載入了HMM的參數
+包括初始機率向量，狀態轉移機率矩陣，發射機率矩陣及CHAR_STATE_TAB_P這個字典(它記錄各個漢字可能的狀態及詞性)
 
+如果是使用Jython的話，會需要用到load_model這個函數，裡面使用pickle這個模組來載入.p檔
+如果是使用純Python的話，直接使用from ... import ...即可
+"""
 def load_model():
     # For Jython
     start_p = pickle.load(get_module_res("posseg", PROB_START_P))
