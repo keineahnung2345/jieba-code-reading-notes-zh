@@ -24,6 +24,8 @@ if opt.topK is None:
 else:
     topK = int(opt.topK)
 
+# 使用者未輸入withWeight參數或輸入值非1則設為False
+# 否則設為True
 if opt.withWeight is None:
     withWeight = False
 else:
