@@ -5,6 +5,9 @@ import jieba
 import jieba.posseg
 from operator import itemgetter
 
+#代碼與_compat.py裡的get_module_res類似
+#但get_module_res是回傳一個開啟的檔案
+#_get_module_path則是回傳檔案的路徑
 _get_module_path = lambda path: os.path.normpath(os.path.join(os.getcwd(),
                                                  os.path.dirname(__file__), path))
 _get_abs_path = jieba._get_abs_path
@@ -13,13 +16,15 @@ DEFAULT_IDF = _get_module_path("idf.txt")
 
 
 class KeywordExtractor(object):
-
+  
+    #停用詞
     STOP_WORDS = set((
         "the", "of", "is", "and", "to", "in", "that", "we", "for", "an", "are",
         "by", "be", "as", "on", "with", "can", "if", "from", "which", "you", "it",
         "this", "then", "at", "have", "all", "not", "one", "has", "or", "that"
     ))
 
+    #自定義停用詞，將stop_words_path裡的資料更新至self.stop_words
     def set_stop_words(self, stop_words_path):
         abs_path = _get_abs_path(stop_words_path)
         if not os.path.isfile(abs_path):
@@ -36,9 +41,12 @@ class IDFLoader(object):
 
     def __init__(self, idf_path=None):
         self.path = ""
+        #idf_freq是一個字典，記錄各詞的頻率
         self.idf_freq = {}
+        #各詞詞頻的中位數
         self.median_idf = 0.0
         if idf_path:
+            #讀取idf_path，更新self.idf_freq及self.median_idf
             self.set_new_path(idf_path)
 
     def set_new_path(self, new_idf_path):
@@ -49,6 +57,7 @@ class IDFLoader(object):
             for line in content.splitlines():
                 word, freq = line.strip().split(' ')
                 self.idf_freq[word] = float(freq)
+            #取list的中位數
             self.median_idf = sorted(
                 self.idf_freq.values())[len(self.idf_freq) // 2]
 
