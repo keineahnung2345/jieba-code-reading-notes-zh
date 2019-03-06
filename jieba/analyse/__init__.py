@@ -6,6 +6,9 @@ try:
 except ImportError:
     pass
 
+"""
+定義全局變數及函數
+"""
 default_tfidf = TFIDF()
 default_textrank = TextRank()
 
